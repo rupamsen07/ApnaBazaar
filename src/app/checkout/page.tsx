@@ -6,6 +6,8 @@ import { placeTakeawayOrder } from "@/lib/products";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Trash2, MessageCircle, AlertTriangle } from "lucide-react";
+import { doc, deleteDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function CheckoutPage() {
   const { items, totalCost, removeFromCart, updateQuantity, clearCart } = useCart();
@@ -48,6 +50,16 @@ export default function CheckoutPage() {
         total: totalCost,
         items: orderItems,
       });
+
+      if (userId && userId !== "ssr") {
+        for (const item of items) {
+          try {
+            await deleteDoc(doc(db, "products", item.id, "reservations", userId));
+          } catch (e) {
+            console.error("Failed to delete reservation explicitly:", e);
+          }
+        }
+      }
 
       // Format WhatsApp message
       const formattedItems = orderItems.map(item => `- ${item.quantity}x ${item.name} (₹${item.price})`).join("\n");

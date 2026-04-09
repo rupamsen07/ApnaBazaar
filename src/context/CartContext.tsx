@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Product, upsertReservation, deleteReservation } from "../lib/products";
 
 export interface CartItem extends Product {
@@ -24,20 +25,14 @@ const CartContext = createContext<CartContextType>({} as CartContextType);
  * Returns a stable user ID for reservation tracking.
  * Priority: authenticated email (written by AuthContext) > stable anon ID from localStorage.
  */
-export function getOrCreateUserId(): string {
+export function getOrCreateUserId(): string | null {
   if (typeof window === "undefined") return "ssr";
-  const authId = localStorage.getItem("apnabazaar_user_id");
-  if (authId) return authId;
-  let anonId = localStorage.getItem("apnabazaar_anon_id");
-  if (!anonId) {
-    anonId = "anon_" + Math.random().toString(36).slice(2, 11);
-    localStorage.setItem("apnabazaar_anon_id", anonId);
-  }
-  return anonId;
+  return localStorage.getItem("apnabazaar_user_id") || null;
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const router = useRouter();
 
   // Hydrate cart from localStorage on mount
   useEffect(() => {
@@ -54,6 +49,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addToCart = (product: Product) => {
     const userId = getOrCreateUserId();
+    if (!userId || userId === "ssr") {
+      router.push("/login");
+      return;
+    }
     // Pre-compute expiry so cart item is immediately accurate
     const reservationExpiresAt = Date.now() + 5 * 60 * 1000;
 
@@ -79,7 +78,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const userId = getOrCreateUserId();
     setItems(prev => {
       const found = prev.find(i => i.id === id);
-      if (found) {
+      if (found && userId && userId !== "ssr") {
         deleteReservation(id, userId).catch(console.error);
       }
       return prev.filter(i => i.id !== id);
@@ -87,7 +86,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateQuantity = (id: string, qty: number) => {
+    if (qty <= 0) {
+      removeFromCart(id);
+      return;
+    }
     const userId = getOrCreateUserId();
+    if (!userId || userId === "ssr") return;
     const reservationExpiresAt = Date.now() + 5 * 60 * 1000;
     setItems(prev => prev.map(i => {
       if (i.id === id) {
@@ -102,9 +106,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const clearCart = () => {
     const userId = getOrCreateUserId();
     setItems(prev => {
-      prev.forEach(item => {
-        deleteReservation(item.id, userId).catch(console.error);
-      });
+      if (userId && userId !== "ssr") {
+        prev.forEach(item => {
+          deleteReservation(item.id, userId).catch(console.error);
+        });
+      }
       return [];
     });
   };
