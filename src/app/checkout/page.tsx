@@ -5,8 +5,8 @@ import Navbar from "@/components/Navbar";
 import { placeTakeawayOrder } from "@/lib/products";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Trash2, MessageCircle, AlertTriangle } from "lucide-react";
-import { doc, deleteDoc } from "firebase/firestore";
+import { CheckCircle2, Trash2, MessageCircle } from "lucide-react";
+import { doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export default function CheckoutPage() {
@@ -14,19 +14,7 @@ export default function CheckoutPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [name, setName] = useState("");
-  const [expiredItemNames, setExpiredItemNames] = useState<string[]>([]);
   const router = useRouter();
-
-  // On mount: detect and evict expired cart reservations
-  useEffect(() => {
-    const now = Date.now();
-    const expired = items.filter(i => i.reservationExpiresAt < now);
-    if (expired.length > 0) {
-      setExpiredItemNames(expired.map(i => i.name));
-      expired.forEach(i => removeFromCart(i.id));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount only
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,23 +35,13 @@ export default function CheckoutPage() {
         quantity: i.cartQuantity
       }));
 
-      // Create Firestore order, deduct master stock, and delete reservations
+      // Create Firestore order, deduct master stock
       await placeTakeawayOrder({
         name: name.trim(),
         userId,
         total: totalCost,
         items: orderItems,
       });
-
-      if (userId && userId !== "ssr") {
-        for (const item of items) {
-          try {
-            await deleteDoc(doc(db, "products", item.id, "reservations", userId));
-          } catch (e) {
-            console.error("Failed to delete reservation explicitly:", e);
-          }
-        }
-      }
 
       // Format WhatsApp message
       const formattedItems = orderItems.map(item => `- ${item.quantity}x ${item.name} (₹${item.price})`).join("\n");
@@ -113,18 +91,6 @@ export default function CheckoutPage() {
       <main className="container mx-auto p-4 md:p-8">
         <h1 className="text-3xl font-bold text-white mb-8 border-b border-slate-800 pb-4">Takeaway Order</h1>
 
-        {/* Reservation expiry warning banner */}
-        {expiredItemNames.length > 0 && (
-          <div className="mb-6 flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300">
-            <AlertTriangle size={20} className="mt-0.5 shrink-0 text-amber-400" />
-            <div>
-              <p className="font-semibold mb-1">Some reserved items have expired and been removed:</p>
-              <p className="text-amber-400/80 text-sm">{expiredItemNames.join(", ")}</p>
-              <p className="text-amber-500/60 text-xs mt-1">Reservations are held for 5 minutes. Re-add them from the store if still available.</p>
-            </div>
-          </div>
-        )}
-
         {items.length === 0 ? (
           <div className="text-center py-20">
             <h2 className="text-xl text-slate-300 font-medium mb-4">Your cart is empty</h2>
@@ -139,20 +105,14 @@ export default function CheckoutPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-4">
               {items.map(item => {
-                const isExpiringSoon = item.reservationExpiresAt - Date.now() < 60 * 1000; // < 1 min left
                 return (
-                  <div key={item.id} className={`flex flex-col sm:flex-row items-center justify-between p-4 bg-slate-800 border rounded-2xl gap-4 ${isExpiringSoon ? 'border-amber-500/50' : 'border-slate-700'}`}>
+                  <div key={item.id} className="flex flex-col sm:flex-row items-center justify-between p-4 bg-slate-800 border rounded-2xl gap-4 border-slate-700">
                     <div className="flex items-center gap-4 w-full sm:w-auto">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={item.imageUrl} alt={item.name} className="w-20 h-20 object-cover rounded-xl bg-slate-700" />
                       <div>
                         <h3 className="font-bold text-slate-100">{item.name}</h3>
                         <p className="text-emerald-400 font-medium">₹{item.price.toFixed(2)}</p>
-                        {isExpiringSoon && (
-                          <p className="text-amber-400 text-xs flex items-center gap-1 mt-1">
-                            <AlertTriangle size={11} /> Reservation expiring soon
-                          </p>
-                        )}
                       </div>
                     </div>
 

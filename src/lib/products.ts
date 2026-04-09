@@ -1,5 +1,5 @@
 import { db } from "./firebase";
-import { collection, getDocs, getDoc, setDoc, doc, deleteDoc, updateDoc, increment } from "firebase/firestore";
+import { collection, getDocs, getDoc, setDoc, doc, deleteDoc, updateDoc, increment, runTransaction } from "firebase/firestore";
 
 export interface Product {
   id: string;
@@ -7,12 +7,6 @@ export interface Product {
   price: number;
   stockQuantity: number;
   imageUrl: string;
-}
-
-export interface Reservation {
-  userId: string;
-  quantityReserved: number;
-  expiresAt: number; // Unix ms timestamp
 }
 
 export interface Order {
@@ -45,100 +39,10 @@ function saveMockProducts(products: Product[]) {
   localStorage.setItem("mockProducts", JSON.stringify(products));
 }
 
-/** Returns products with RAW master stockQuantity — used by admin dashboard only. */
 export async function getProducts(): Promise<Product[]> {
   if (isMock) return getMockProducts();
   const snap = await getDocs(collection(db, "products"));
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
-}
-
-/**
- * Returns products with AVAILABLE stock = masterStock - sum(active reservations).
- * Use this on the customer-facing product listing.
- */
-export async function getProductsWithAvailableStock(): Promise<Product[]> {
-  if (isMock) {
-    const products = getMockProducts();
-    const allReservations: Record<string, Record<string, Reservation>> =
-      typeof window !== "undefined"
-        ? JSON.parse(localStorage.getItem("mockReservations") || "{}")
-        : {};
-    const now = Date.now();
-    return products.map(p => {
-      const productRes = allReservations[p.id] || {};
-      const activeReserved = Object.values(productRes)
-        .filter(r => r.expiresAt > now)
-        .reduce((sum, r) => sum + r.quantityReserved, 0);
-      return { ...p, stockQuantity: Math.max(0, p.stockQuantity - activeReserved) };
-    });
-  }
-
-  const snap = await getDocs(collection(db, "products"));
-  const products = snap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
-  const now = Date.now();
-  return Promise.all(
-    products.map(async p => {
-      const resSnap = await getDocs(collection(db, "products", p.id, "reservations"));
-      const activeReserved = resSnap.docs
-        .map(d => d.data() as Reservation)
-        .filter(r => r.expiresAt > now)
-        .reduce((sum, r) => sum + r.quantityReserved, 0);
-      return { ...p, stockQuantity: Math.max(0, p.stockQuantity - activeReserved) };
-    })
-  );
-}
-
-/**
- * Creates or overwrites a user's reservation for a product.
- * Resets the expiry to 5 minutes from now.
- * Returns the new expiresAt timestamp.
- */
-export async function upsertReservation(
-  productId: string,
-  userId: string,
-  quantityReserved: number
-): Promise<number> {
-  const expiresAt = Date.now() + 5 * 60 * 1000;
-
-  if (isMock) {
-    if (typeof window !== "undefined") {
-      const all: Record<string, Record<string, Reservation>> = JSON.parse(
-        localStorage.getItem("mockReservations") || "{}"
-      );
-      if (!all[productId]) all[productId] = {};
-      all[productId][userId] = { userId, quantityReserved, expiresAt };
-      localStorage.setItem("mockReservations", JSON.stringify(all));
-    }
-    return expiresAt;
-  }
-
-  await setDoc(doc(db, "products", productId, "reservations", userId), {
-    userId,
-    quantityReserved,
-    expiresAt,
-  });
-  return expiresAt;
-}
-
-/** Removes a user's reservation for a product. */
-export async function deleteReservation(productId: string, userId: string): Promise<void> {
-  if (isMock) {
-    if (typeof window !== "undefined") {
-      const all: Record<string, Record<string, Reservation>> = JSON.parse(
-        localStorage.getItem("mockReservations") || "{}"
-      );
-      if (all[productId]) {
-        delete all[productId][userId];
-        localStorage.setItem("mockReservations", JSON.stringify(all));
-      }
-    }
-    return;
-  }
-  try {
-    await deleteDoc(doc(db, "products", productId, "reservations", userId));
-  } catch {
-    // Reservation may have already been cleaned up — safe to ignore
-  }
 }
 
 export async function addProduct(product: Omit<Product, "id">): Promise<void> {
@@ -184,57 +88,65 @@ export async function placeTakeawayOrder(
 ): Promise<void> {
   if (isMock) {
     const products = getMockProducts();
+    for (const orderItem of orderData.items) {
+      const p = products.find(prod => prod.id === orderItem.id);
+      if (!p || p.stockQuantity < orderItem.quantity) {
+        throw new Error(`Sorry! Another neighbor just bought the last ${orderItem.name}. Please adjust your cart.`);
+      }
+    }
     const updated = products.map(p => {
       const orderItem = orderData.items.find(i => i.id === p.id);
       if (orderItem) {
-        return { ...p, stockQuantity: Math.max(0, p.stockQuantity - orderItem.quantity) };
+        return { ...p, stockQuantity: p.stockQuantity - orderItem.quantity };
       }
       return p;
     });
     saveMockProducts(updated);
 
     if (typeof window !== "undefined") {
-      // Save mock order
       const storedOrders = localStorage.getItem("mockOrders");
       const mockOrders = storedOrders ? JSON.parse(storedOrders) : [];
       const orderId = `${orderData.name} - ${Date.now()}`;
       mockOrders.push({ ...orderData, id: orderId, createdAt: new Date().toISOString(), status: "pending" });
       localStorage.setItem("mockOrders", JSON.stringify(mockOrders));
-
-      // Delete mock reservations for this user
-      const all: Record<string, Record<string, Reservation>> = JSON.parse(
-        localStorage.getItem("mockReservations") || "{}"
-      );
-      orderData.items.forEach(item => {
-        if (all[item.id]) delete all[item.id][orderData.userId];
-      });
-      localStorage.setItem("mockReservations", JSON.stringify(all));
     }
     return;
   }
 
-  // Write order document
-  const orderId = `${orderData.name} - ${Date.now()}`;
-  const newRef = doc(db, "orders", orderId);
-  await setDoc(newRef, {
-    name: orderData.name,
-    total: orderData.total,
-    items: orderData.items,
-    createdAt: new Date().toISOString(),
-    status: "pending",
-  });
-
-  // Permanently deduct master stock AND delete reservations
-  for (const item of orderData.items) {
-    const snap = await getProducts();
-    const prod = snap.find(p => p.id === item.id);
-    if (prod) {
-      await updateDoc(doc(db, "products", item.id), {
-        stockQuantity: Math.max(0, prod.stockQuantity - item.quantity)
-      });
+  await runTransaction(db, async (transaction) => {
+    // Read all products first
+    const productRefs = orderData.items.map(item => doc(db, "products", item.id));
+    const productDocs = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+    
+    // Check stock
+    for (let i = 0; i < productDocs.length; i++) {
+        const pDoc = productDocs[i];
+        if (!pDoc.exists()) {
+             throw new Error(`Product ${orderData.items[i].name} no longer exists.`);
+        }
+        const currentStock = pDoc.data().stockQuantity;
+        if (currentStock < orderData.items[i].quantity) {
+             throw new Error(`Sorry! Another neighbor just bought the last ${orderData.items[i].name}. Please adjust your cart.`);
+        }
     }
-    await deleteReservation(item.id, orderData.userId);
-  }
+
+    // Deduct stock
+    for (let i = 0; i < productDocs.length; i++) {
+        const newStock = productDocs[i].data().stockQuantity - orderData.items[i].quantity;
+        transaction.update(productRefs[i], { stockQuantity: newStock });
+    }
+
+    // Create Order
+    const orderId = `${orderData.name} - ${Date.now()}`;
+    const orderRef = doc(db, "orders", orderId);
+    transaction.set(orderRef, {
+      name: orderData.name,
+      total: orderData.total,
+      items: orderData.items,
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    });
+  });
 }
 
 export async function getPendingOrders(): Promise<Order[]> {
@@ -314,68 +226,5 @@ export async function cancelOrder(orderId: string): Promise<void> {
       }
       await updateDoc(doc(db, "orders", orderId), { status: "cancelled" });
     }
-  }
-}
-
-export interface ActiveReservationDisplay {
-  userId: string;
-  items: Array<{ productId: string; productName: string; quantity: number }>;
-}
-
-export async function getAllActiveReservations(): Promise<ActiveReservationDisplay[]> {
-  const products = await getProducts();
-  const now = Date.now();
-  const userCarts: Record<string, { userId: string, items: { productId: string, productName: string, quantity: number }[] }> = {};
-
-  if (isMock) {
-    if (typeof window !== "undefined") {
-      const all: Record<string, Record<string, Reservation>> = JSON.parse(
-        localStorage.getItem("mockReservations") || "{}"
-      );
-      for (const p of products) {
-        const prodRes = all[p.id] || {};
-        for (const [userId, res] of Object.entries(prodRes)) {
-          if (res.expiresAt > now) {
-            if (!userCarts[userId]) userCarts[userId] = { userId, items: [] };
-            userCarts[userId].items.push({ productId: p.id, productName: p.name, quantity: res.quantityReserved });
-          }
-        }
-      }
-    }
-  } else {
-    for (const p of products) {
-      const resSnap = await getDocs(collection(db, "products", p.id, "reservations"));
-      resSnap.docs.forEach(d => {
-        const res = d.data() as Reservation;
-        if (res.expiresAt > now) {
-          if (!userCarts[res.userId]) userCarts[res.userId] = { userId: res.userId, items: [] };
-          userCarts[res.userId].items.push({ productId: p.id, productName: p.name, quantity: res.quantityReserved });
-        }
-      });
-    }
-  }
-
-  return Object.values(userCarts);
-}
-
-export async function disbandCart(userId: string, productIds: string[]): Promise<void> {
-  if (isMock) {
-    if (typeof window !== "undefined") {
-      const all: Record<string, Record<string, Reservation>> = JSON.parse(
-        localStorage.getItem("mockReservations") || "{}"
-      );
-      for (const pid of productIds) {
-        if (all[pid] && all[pid][userId]) {
-          delete all[pid][userId];
-        }
-      }
-      localStorage.setItem("mockReservations", JSON.stringify(all));
-    }
-    return;
-  }
-  for (const pid of productIds) {
-    try {
-      await deleteDoc(doc(db, "products", pid, "reservations", userId));
-    } catch {}
   }
 }

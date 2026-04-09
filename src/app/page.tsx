@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getProductsWithAvailableStock, Product } from "@/lib/products";
+import { getProducts, Product } from "@/lib/products";
 import { useCart } from "@/context/CartContext";
 import Navbar from "@/components/Navbar";
 import { Minus, Plus, ShoppingCart } from "lucide-react";
@@ -14,7 +14,7 @@ export default function Home() {
   useEffect(() => {
     async function load() {
       try {
-        const data = await getProductsWithAvailableStock();
+        const data = await getProducts();
         setProducts(data);
       } catch (e) {
         console.error(e);
