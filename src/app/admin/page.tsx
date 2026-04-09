@@ -179,7 +179,7 @@ export default function AdminDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Price ($)</label>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Price (₹)</label>
                 <input 
                   type="number" 
                   step="0.01"
@@ -241,7 +241,7 @@ export default function AdminDashboard() {
                       </div>
                     </td>
                     <td className="p-4 text-emerald-400 font-medium whitespace-nowrap">
-                      ${product.price.toFixed(2)}
+                      ₹{product.price.toFixed(2)}
                     </td>
                     <td className="p-4">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold ${product.stockQuantity > 5 ? 'bg-slate-700 text-slate-300' : product.stockQuantity > 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -313,7 +313,7 @@ export default function AdminDashboard() {
                       </ul>
                     </td>
                     <td className="p-4 text-emerald-400 font-medium whitespace-nowrap">
-                      ${order.total.toFixed(2)}
+                      ₹{order.total.toFixed(2)}
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2">
