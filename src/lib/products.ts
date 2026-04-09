@@ -1,5 +1,5 @@
 import { db } from "./firebase";
-import { collection, getDocs, setDoc, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, getDoc, setDoc, doc, deleteDoc, updateDoc, increment } from "firebase/firestore";
 
 export interface Product {
   id: string;
@@ -277,4 +277,105 @@ export async function deleteOrder(id: string): Promise<void> {
     return;
   }
   await deleteDoc(doc(db, "orders", id));
+}
+
+export async function cancelOrder(orderId: string): Promise<void> {
+  if (isMock) {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("mockOrders");
+      const mockOrders = stored ? JSON.parse(stored) : [];
+      const order = mockOrders.find((o: Order) => o.id === orderId);
+      if (order && order.status === "pending") {
+        const products = getMockProducts();
+        const updatedProducts = products.map(p => {
+          const item = order.items.find((i: any) => i.id === p.id);
+          if (item) {
+            return { ...p, stockQuantity: p.stockQuantity + item.quantity };
+          }
+          return p;
+        });
+        saveMockProducts(updatedProducts);
+        
+        const updatedOrders = mockOrders.map((o: Order) => o.id === orderId ? { ...o, status: "cancelled" } : o);
+        localStorage.setItem("mockOrders", JSON.stringify(updatedOrders));
+      }
+    }
+    return;
+  }
+  
+  const orderDoc = await getDoc(doc(db, "orders", orderId));
+  if (orderDoc.exists()) {
+    const orderData = orderDoc.data() as Order;
+    if (orderData.status === "pending") {
+      for (const item of orderData.items) {
+        await updateDoc(doc(db, "products", item.id), {
+          stockQuantity: increment(item.quantity)
+        });
+      }
+      await updateDoc(doc(db, "orders", orderId), { status: "cancelled" });
+    }
+  }
+}
+
+export interface ActiveReservationDisplay {
+  userId: string;
+  items: Array<{ productId: string; productName: string; quantity: number }>;
+}
+
+export async function getAllActiveReservations(): Promise<ActiveReservationDisplay[]> {
+  const products = await getProducts();
+  const now = Date.now();
+  const userCarts: Record<string, { userId: string, items: { productId: string, productName: string, quantity: number }[] }> = {};
+
+  if (isMock) {
+    if (typeof window !== "undefined") {
+      const all: Record<string, Record<string, Reservation>> = JSON.parse(
+        localStorage.getItem("mockReservations") || "{}"
+      );
+      for (const p of products) {
+        const prodRes = all[p.id] || {};
+        for (const [userId, res] of Object.entries(prodRes)) {
+          if (res.expiresAt > now) {
+            if (!userCarts[userId]) userCarts[userId] = { userId, items: [] };
+            userCarts[userId].items.push({ productId: p.id, productName: p.name, quantity: res.quantityReserved });
+          }
+        }
+      }
+    }
+  } else {
+    for (const p of products) {
+      const resSnap = await getDocs(collection(db, "products", p.id, "reservations"));
+      resSnap.docs.forEach(d => {
+        const res = d.data() as Reservation;
+        if (res.expiresAt > now) {
+          if (!userCarts[res.userId]) userCarts[res.userId] = { userId: res.userId, items: [] };
+          userCarts[res.userId].items.push({ productId: p.id, productName: p.name, quantity: res.quantityReserved });
+        }
+      });
+    }
+  }
+
+  return Object.values(userCarts);
+}
+
+export async function disbandCart(userId: string, productIds: string[]): Promise<void> {
+  if (isMock) {
+    if (typeof window !== "undefined") {
+      const all: Record<string, Record<string, Reservation>> = JSON.parse(
+        localStorage.getItem("mockReservations") || "{}"
+      );
+      for (const pid of productIds) {
+        if (all[pid] && all[pid][userId]) {
+          delete all[pid][userId];
+        }
+      }
+      localStorage.setItem("mockReservations", JSON.stringify(all));
+    }
+    return;
+  }
+  for (const pid of productIds) {
+    try {
+      await deleteDoc(doc(db, "products", pid, "reservations", userId));
+    } catch {}
+  }
 }

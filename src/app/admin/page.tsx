@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import { getProducts, addProduct, updateProduct, deleteProduct, Product, getPendingOrders, updateOrderStatus, deleteOrder, Order } from "@/lib/products";
+import { getProducts, addProduct, updateProduct, deleteProduct, Product, getPendingOrders, updateOrderStatus, deleteOrder, Order, cancelOrder, getAllActiveReservations, disbandCart, ActiveReservationDisplay } from "@/lib/products";
 import { Pencil, Trash2, Plus, X, Save, CheckCircle2 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -13,6 +13,7 @@ export default function AdminDashboard() {
   
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [activeCarts, setActiveCarts] = useState<ActiveReservationDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [isAdding, setIsAdding] = useState(false);
@@ -38,12 +39,14 @@ export default function AdminDashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [fetchedProducts, fetchedOrders] = await Promise.all([
+      const [fetchedProducts, fetchedOrders, fetchedCarts] = await Promise.all([
         getProducts(),
-        getPendingOrders()
+        getPendingOrders(),
+        getAllActiveReservations()
       ]);
       setProducts(fetchedProducts);
       setOrders(fetchedOrders);
+      setActiveCarts(fetchedCarts);
     } catch (e) {
       console.error(e);
     }
@@ -98,14 +101,25 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteOrder = async (id?: string) => {
+  const handleCancelOrder = async (id?: string) => {
     if (!id) return;
-    if (confirm("Are you sure you want to delete this order?")) {
+    if (confirm("Are you sure you want to cancel this order and restock items?")) {
       try {
-        await deleteOrder(id);
+        await cancelOrder(id);
         loadData();
       } catch (e) {
-        alert("Failed to delete order");
+        alert("Failed to cancel order");
+      }
+    }
+  };
+
+  const handleDisbandCart = async (userId: string, productIds: string[]) => {
+    if (confirm(`Are you sure you want to disband the cart for ${userId}?`)) {
+      try {
+        await disbandCart(userId, productIds);
+        loadData();
+      } catch (e) {
+        alert("Failed to disband cart");
       }
     }
   };
@@ -325,13 +339,65 @@ export default function AdminDashboard() {
                           <CheckCircle2 size={16} /> Complete
                         </button>
                         <button 
-                          onClick={() => handleDeleteOrder(order.id)}
+                          onClick={() => handleCancelOrder(order.id)}
                           className="flex items-center gap-2 px-3 py-1 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-colors border border-red-500/30 font-medium text-sm"
-                          title="Delete"
+                          title="Cancel"
                         >
-                          <Trash2 size={16} /> Delete
+                          <X size={16} /> Cancel
                         </button>
                       </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+
+        <div className="flex justify-between items-center mt-12 mb-8 border-b border-slate-800 pb-4">
+          <h1 className="text-3xl font-bold text-white">Active Live Carts</h1>
+        </div>
+
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl overflow-x-auto mb-12">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-900/50 border-b border-slate-700 text-slate-400 text-sm uppercase tracking-wider">
+                <th className="p-4 font-medium">User Email</th>
+                <th className="p-4 font-medium">Reserved Items</th>
+                <th className="p-4 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={3} className="p-8 text-center text-slate-400">Loading active carts...</td>
+                </tr>
+              ) : activeCarts.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="p-8 text-center text-slate-400">No active live carts found.</td>
+                </tr>
+              ) : (
+                activeCarts.map((cart) => (
+                  <tr key={cart.userId} className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors">
+                    <td className="p-4">
+                      <span className="font-bold text-slate-100 whitespace-nowrap">{cart.userId}</span>
+                    </td>
+                    <td className="p-4">
+                      <ul className="text-sm text-slate-300">
+                        {cart.items.map((i, idx) => (
+                          <li key={idx} className="whitespace-nowrap">- {i.quantity}x {i.productName}</li>
+                        ))}
+                      </ul>
+                    </td>
+                    <td className="p-4 text-right">
+                      <button 
+                        onClick={() => handleDisbandCart(cart.userId, cart.items.map(i => i.productId))}
+                        className="flex items-center gap-2 px-3 py-1 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-colors border border-red-500/30 font-medium text-sm ml-auto"
+                        title="Disband Cart"
+                      >
+                        <Trash2 size={16} /> Disband Cart
+                      </button>
                     </td>
                   </tr>
                 ))
