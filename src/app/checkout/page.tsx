@@ -36,6 +36,10 @@ export default function CheckoutPage() {
 
     try {
       const userId = getOrCreateUserId();
+      if (!userId || userId === "ssr") {
+        throw new Error("You must be logged in to place an order.");
+      }
+
       const orderItems = items.map(i => ({
         id: i.id,
         name: i.name,
