@@ -4,8 +4,9 @@ import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
-import { AuthProvider } from "@/context/AuthContext";
-import { CartProvider } from "@/context/CartContext";
+import {AuthProvider} from "@/context/AuthContext";
+import {CartProvider} from "@/context/CartContext";
+import {Analytics} from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "ApnaBazaar",
@@ -19,13 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} min-h-screen bg-slate-900 text-slate-50 antialiased`}>
-        <AuthProvider>
-          <CartProvider>
-            {children}
-          </CartProvider>
-        </AuthProvider>
-      </body>
+      <body className={`${inter.className} min-h-screen bg-slate-900 text-slate-50 antialiased`}><AuthProvider><CartProvider>{children}<Analytics/></CartProvider></AuthProvider></body>
     </html>
   );
 }
