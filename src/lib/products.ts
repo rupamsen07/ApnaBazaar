@@ -87,22 +87,6 @@ export async function placeTakeawayOrder(
   }
 ): Promise<void> {
   if (isMock) {
-    const products = getMockProducts();
-    for (const orderItem of orderData.items) {
-      const p = products.find(prod => prod.id === orderItem.id);
-      if (!p || p.stockQuantity < orderItem.quantity) {
-        throw new Error(`Sorry! Another neighbor just bought the last ${orderItem.name}. Please adjust your cart.`);
-      }
-    }
-    const updated = products.map(p => {
-      const orderItem = orderData.items.find(i => i.id === p.id);
-      if (orderItem) {
-        return { ...p, stockQuantity: p.stockQuantity - orderItem.quantity };
-      }
-      return p;
-    });
-    saveMockProducts(updated);
-
     if (typeof window !== "undefined") {
       const storedOrders = localStorage.getItem("mockOrders");
       const mockOrders = storedOrders ? JSON.parse(storedOrders) : [];
@@ -113,39 +97,70 @@ export async function placeTakeawayOrder(
     return;
   }
 
+  const orderId = `${orderData.name} - ${Date.now()}`;
+  const orderRef = doc(db, "orders", orderId);
+  await setDoc(orderRef, {
+    name: orderData.name,
+    total: orderData.total,
+    items: orderData.items,
+    createdAt: new Date().toISOString(),
+    status: "pending",
+  });
+}
+
+export async function fulfillOrder(orderId: string): Promise<void> {
+  if (isMock) {
+    if (typeof window !== "undefined") {
+      const storedOrders = localStorage.getItem("mockOrders");
+      const mockOrders = storedOrders ? JSON.parse(storedOrders) : [];
+      const order = mockOrders.find((o: Order) => o.id === orderId);
+      
+      if (order && order.status === "pending") {
+        const products = getMockProducts();
+        
+        // Deduct stock locally
+        const updatedProducts = products.map(p => {
+          const item = order.items.find((i: any) => i.id === p.id);
+          if (item) {
+            return { ...p, stockQuantity: Math.max(0, p.stockQuantity - item.quantity) };
+          }
+          return p;
+        });
+        saveMockProducts(updatedProducts);
+        
+        const updatedOrders = mockOrders.map((o: Order) => o.id === orderId ? { ...o, status: "completed" } : o);
+        localStorage.setItem("mockOrders", JSON.stringify(updatedOrders));
+      }
+    }
+    return;
+  }
+
   await runTransaction(db, async (transaction) => {
-    // Read all products first
+    const orderRef = doc(db, "orders", orderId);
+    const orderDoc = await transaction.get(orderRef);
+
+    if (!orderDoc.exists()) {
+      throw new Error("Order does not exist.");
+    }
+    
+    const orderData = orderDoc.data() as Order;
+    if (orderData.status !== "pending") {
+      throw new Error("Order is not pending.");
+    }
+
     const productRefs = orderData.items.map(item => doc(db, "products", item.id));
     const productDocs = await Promise.all(productRefs.map(ref => transaction.get(ref)));
-    
-    // Check stock
+
     for (let i = 0; i < productDocs.length; i++) {
         const pDoc = productDocs[i];
-        if (!pDoc.exists()) {
-             throw new Error(`Product ${orderData.items[i].name} no longer exists.`);
-        }
-        const currentStock = pDoc.data().stockQuantity;
-        if (currentStock < orderData.items[i].quantity) {
-             throw new Error(`Sorry! Another neighbor just bought the last ${orderData.items[i].name}. Please adjust your cart.`);
+        if (pDoc.exists()) {
+            const currentStock = pDoc.data().stockQuantity;
+            const newStock = currentStock - orderData.items[i].quantity;
+            transaction.update(productRefs[i], { stockQuantity: newStock });
         }
     }
 
-    // Deduct stock
-    for (let i = 0; i < productDocs.length; i++) {
-        const newStock = productDocs[i].data().stockQuantity - orderData.items[i].quantity;
-        transaction.update(productRefs[i], { stockQuantity: newStock });
-    }
-
-    // Create Order
-    const orderId = `${orderData.name} - ${Date.now()}`;
-    const orderRef = doc(db, "orders", orderId);
-    transaction.set(orderRef, {
-      name: orderData.name,
-      total: orderData.total,
-      items: orderData.items,
-      createdAt: new Date().toISOString(),
-      status: "pending",
-    });
+    transaction.update(orderRef, { status: "completed" });
   });
 }
 
@@ -196,21 +211,8 @@ export async function cancelOrder(orderId: string): Promise<void> {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("mockOrders");
       const mockOrders = stored ? JSON.parse(stored) : [];
-      const order = mockOrders.find((o: Order) => o.id === orderId);
-      if (order && order.status === "pending") {
-        const products = getMockProducts();
-        const updatedProducts = products.map(p => {
-          const item = order.items.find((i: any) => i.id === p.id);
-          if (item) {
-            return { ...p, stockQuantity: p.stockQuantity + item.quantity };
-          }
-          return p;
-        });
-        saveMockProducts(updatedProducts);
-        
-        const updatedOrders = mockOrders.map((o: Order) => o.id === orderId ? { ...o, status: "cancelled" } : o);
-        localStorage.setItem("mockOrders", JSON.stringify(updatedOrders));
-      }
+      const updatedOrders = mockOrders.map((o: Order) => o.id === orderId ? { ...o, status: "cancelled" } : o);
+      localStorage.setItem("mockOrders", JSON.stringify(updatedOrders));
     }
     return;
   }
@@ -219,11 +221,6 @@ export async function cancelOrder(orderId: string): Promise<void> {
   if (orderDoc.exists()) {
     const orderData = orderDoc.data() as Order;
     if (orderData.status === "pending") {
-      for (const item of orderData.items) {
-        await updateDoc(doc(db, "products", item.id), {
-          stockQuantity: increment(item.quantity)
-        });
-      }
       await updateDoc(doc(db, "orders", orderId), { status: "cancelled" });
     }
   }

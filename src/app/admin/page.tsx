@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import { getProducts, addProduct, updateProduct, deleteProduct, Product, getPendingOrders, updateOrderStatus, deleteOrder, Order, cancelOrder } from "@/lib/products";
+import { getProducts, addProduct, updateProduct, deleteProduct, Product, getPendingOrders, updateOrderStatus, deleteOrder, Order, cancelOrder, fulfillOrder } from "@/lib/products";
 import { Pencil, Trash2, Plus, X, Save, CheckCircle2 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -91,20 +91,22 @@ export default function AdminDashboard() {
   const handleCompleteOrder = async (id?: string) => {
     if (!id) return;
     try {
-      await updateOrderStatus(id, "completed");
+      await fulfillOrder(id);
       loadData();
     } catch (e) {
+      console.error(e);
       alert("Failed to complete order");
     }
   };
 
   const handleCancelOrder = async (id?: string) => {
     if (!id) return;
-    if (confirm("Are you sure you want to cancel this order and restock items?")) {
+    if (confirm("Are you sure you want to cancel this order?")) {
       try {
         await cancelOrder(id);
         loadData();
       } catch (e) {
+        console.error(e);
         alert("Failed to cancel order");
       }
     }
