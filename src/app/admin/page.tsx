@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import { getProducts, addProduct, updateProduct, deleteProduct, Product, getPendingOrders, updateOrderStatus, deleteOrder, Order, cancelOrder, fulfillOrder } from "@/lib/products";
+import { getProducts, addProduct, updateProduct, deleteProduct, Product, updateOrderStatus, deleteOrder, Order, cancelOrder, fulfillOrder } from "@/lib/products";
 import { Pencil, Trash2, Plus, X, Save, CheckCircle2 } from "lucide-react";
+import {collection,query,where,onSnapshot} from "firebase/firestore";
+import {db} from "@/lib/firebase";
 
 export default function AdminDashboard() {
   const { user, role, loading: authLoading } = useAuth();
@@ -25,30 +27,8 @@ export default function AdminDashboard() {
     imageUrl: ""
   });
 
-  useEffect(() => {
-    if (!authLoading) {
-      if (!user || role !== "admin") {
-        router.push("/");
-      } else {
-        loadData();
-      }
-    }
-  }, [user, role, authLoading, router]);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [fetchedProducts, fetchedOrders] = await Promise.all([
-        getProducts(),
-        getPendingOrders()
-      ]);
-      setProducts(fetchedProducts);
-      setOrders(fetchedOrders);
-    } catch (e) {
-      console.error(e);
-    }
-    setLoading(false);
-  };
+  useEffect(()=>{if(!authLoading){if(!user||role!=="admin"){router.push("/");}else{loadData();const q=query(collection(db,"orders"),where("status","==","pending"));const unsubscribe=onSnapshot(q,(snapshot)=>{const activeOrders=snapshot.docs.map(doc=>({id:doc.id,...doc.data()} as Order)).sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime());setOrders(activeOrders);});return ()=>unsubscribe();}}},[user,role,authLoading,router]);
+  const loadData=async()=>{setLoading(true);try{const fetchedProducts=await getProducts();setProducts(fetchedProducts);}catch(e){console.error(e);}setLoading(false);};
 
   const handleAdd = async () => {
     try {
