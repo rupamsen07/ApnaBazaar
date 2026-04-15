@@ -7,6 +7,7 @@ export interface Product {
   price: number;
   stockQuantity: number;
   imageUrl: string;
+  category?: string;
 }
 
 export interface Order {

@@ -24,7 +24,8 @@ export default function AdminDashboard() {
     name: "",
     price: 0,
     stockQuantity: 0,
-    imageUrl: ""
+    imageUrl: "",
+    category: "Others"
   });
 
   useEffect(()=>{if(!authLoading){if(!user||role!=="admin"){router.push("/");}else{loadData();const q=query(collection(db,"orders"),where("status","==","pending"));const unsubscribe=onSnapshot(q,(snapshot)=>{const activeOrders=snapshot.docs.map(doc=>({id:doc.id,...doc.data()} as Order)).sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime());setOrders(activeOrders);});return ()=>unsubscribe();}}},[user,role,authLoading,router]);
@@ -34,7 +35,7 @@ export default function AdminDashboard() {
     try {
       await addProduct(formData);
       setIsAdding(false);
-      setFormData({ name: "", price: 0, stockQuantity: 0, imageUrl: "" });
+      setFormData({ name: "", price: 0, stockQuantity: 0, imageUrl: "", category: "Others" });
       loadData();
     } catch (e) {
       alert("Failed to add");
@@ -48,7 +49,8 @@ export default function AdminDashboard() {
         name: formData.name,
         price: Number(formData.price),
         stockQuantity: Number(formData.stockQuantity),
-        imageUrl: formData.imageUrl
+        imageUrl: formData.imageUrl,
+        category: formData.category
       });
       setEditingId(null);
       loadData();
@@ -98,7 +100,8 @@ export default function AdminDashboard() {
       name: p.name,
       price: p.price,
       stockQuantity: p.stockQuantity,
-      imageUrl: p.imageUrl
+      imageUrl: p.imageUrl,
+      category: p.category || "Others"
     });
   };
 
@@ -117,7 +120,7 @@ export default function AdminDashboard() {
               onClick={() => {
                 setIsAdding(true);
                 setEditingId(null);
-                setFormData({ name: "", price: 0, stockQuantity: 0, imageUrl: "" });
+                setFormData({ name: "", price: 0, stockQuantity: 0, imageUrl: "", category: "Others" });
               }}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg transition-colors shadow-lg shadow-emerald-500/20"
             >
@@ -178,6 +181,21 @@ export default function AdminDashboard() {
                   onChange={e => setFormData({...formData, stockQuantity: parseInt(e.target.value) || 0})}
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-100 outline-none"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Category</label>
+                <select 
+                  value={formData.category}
+                  onChange={e => setFormData({...formData, category: e.target.value})}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-100 outline-none"
+                >
+                  <option value="Chips">Chips</option>
+                  <option value="Biscuits">Biscuits</option>
+                  <option value="Drinks">Drinks</option>
+                  <option value="Cakes">Cakes</option>
+                  <option value="Noodles">Noodles</option>
+                  <option value="Others">Others</option>
+                </select>
               </div>
             </div>
 

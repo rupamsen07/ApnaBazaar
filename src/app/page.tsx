@@ -9,7 +9,9 @@ import { Minus, Plus, ShoppingCart } from "lucide-react";
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeCategory, setActiveCategory] = useState("All");
   const { items, addToCart, removeFromCart, updateQuantity } = useCart();
+  const categories = ["All", "Chips", "Biscuits", "Drinks", "Cakes", "Noodles", "Others"];
 
   useEffect(() => {
     async function load() {
@@ -28,13 +30,25 @@ export default function Home() {
     <>
       <Navbar />
       <main className="container mx-auto p-4 md:p-8 pt-8 md:pt-12">
-        <div className="mb-10 text-center md:text-left">
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-white mb-4">
-            Welcome to <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-cyan-400">ApnaBazaar</span>
+        <div className="mb-10 text-center md:text-left bg-gradient-to-br from-slate-800 to-slate-900 p-8 rounded-3xl border border-slate-700/50 shadow-2xl">
+          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white mb-6">
+            Welcome to <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-500">ApnaBazaar</span>
           </h1>
-          <p className="text-lg text-slate-400 max-w-2xl">
-            Quick, reliable, and premium everyday shopping.
+          <p className="text-xl md:text-2xl text-slate-300 font-medium">
+            Your late-night hostel cravings, sorted. Quick, reliable, and premium.
           </p>
+        </div>
+
+        <div className="flex overflow-x-auto gap-3 py-4 mb-8 scrollbar-hide">
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`whitespace-nowrap px-6 py-2 rounded-full font-bold transition-all ${activeCategory === cat ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700'}`}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
 
         {loading ? (
@@ -45,15 +59,15 @@ export default function Home() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {products.map((product) => {
+            {products.filter(p => activeCategory === "All" || (p.category || "Others") === activeCategory).map((product) => {
               const cartItem = items.find(i => i.id === product.id);
               const inCartQty = cartItem?.cartQuantity ?? 0;
 
               return (
-                <div key={product.id} className="group flex flex-col bg-slate-800 border border-slate-700/50 rounded-2xl overflow-hidden hover:border-emerald-500/50 transition-colors">
-                  <div className="relative h-48 bg-slate-700 overflow-hidden">
+                <div key={product.id} className="group flex flex-col bg-slate-800 border border-slate-700/50 rounded-2xl overflow-hidden hover:border-emerald-500/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-500/10">
+                  <div className="relative aspect-square w-full bg-slate-800/50 overflow-hidden flex items-center justify-center p-6">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <img src={product.imageUrl} alt={product.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500 drop-shadow-lg" />
                     {product.stockQuantity <= 0 && (
                       <div className="absolute inset-0 bg-slate-900/80 flex items-center justify-center backdrop-blur-sm">
                         <span className="text-white font-bold px-4 py-2 bg-red-500/80 rounded-lg">OUT OF STOCK</span>
@@ -65,10 +79,10 @@ export default function Home() {
                       </div>
                     )}
                   </div>
-                  <div className="p-5 flex flex-col flex-grow">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-lg font-bold text-slate-100 leading-tight">{product.name}</h3>
-                      <span className="text-emerald-400 font-bold whitespace-nowrap ml-3">₹{product.price.toFixed(2)}</span>
+                  <div className="p-6 flex flex-col flex-grow">
+                    <div className="flex justify-between items-start mb-3">
+                      <h3 className="text-xl font-extrabold text-slate-100 leading-tight">{product.name}</h3>
+                      <span className="text-2xl text-emerald-400 font-extrabold whitespace-nowrap ml-3 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">₹{product.price.toFixed(2)}</span>
                     </div>
                     <p className="text-sm text-slate-400 mb-6 flex-grow">
                       Available: <span className={product.stockQuantity > 5 ? "text-slate-300" : product.stockQuantity > 0 ? "text-amber-400 font-medium" : "text-red-400 font-medium"}>{product.stockQuantity}</span>

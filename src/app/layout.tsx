@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 import {AuthProvider} from "@/context/AuthContext";
 import {CartProvider} from "@/context/CartContext";
-import {Analytics} from "@vercel/analytics/next";
+import {Analytics} from "@vercel/analytics/react";
 
 export const metadata: Metadata = {
   title: "ApnaBazaar",
