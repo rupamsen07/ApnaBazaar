@@ -5,12 +5,15 @@ import { getProducts, Product } from "@/lib/products";
 import { useCart } from "@/context/CartContext";
 import Navbar from "@/components/Navbar";
 import { Minus, Plus, ShoppingCart } from "lucide-react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("All");
   const [showOutOfStock, setShowOutOfStock] = useState(false);
+  const [storeOpen, setStoreOpen] = useState(true);
   const { items, addToCart, removeFromCart, updateQuantity } = useCart();
   const categories = ["All", "Chips", "Biscuits", "Drinks", "Cakes", "Noodles", "Others"];
 
@@ -25,6 +28,14 @@ export default function Home() {
       setLoading(false);
     }
     load();
+    const unsub = onSnapshot(doc(db, "settings", "status"), (snap) => {
+      if (snap.exists()) {
+        setStoreOpen(snap.data().isOpen !== false);
+      } else {
+        setStoreOpen(true);
+      }
+    });
+    return () => unsub();
   }, []);
 
   return (
@@ -39,6 +50,13 @@ export default function Home() {
             Your late-night hostel cravings, sorted. Quick, reliable, and premium.
           </p>
         </div>
+
+        {!storeOpen && (
+          <div className="mb-8 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-3">
+            <span className="text-2xl">🚨</span>
+            <p className="text-red-400 font-bold text-lg">The store is currently CLOSED. We are not accepting orders right now.</p>
+          </div>
+        )}
 
         <div className="flex flex-col md:flex-row justify-between items-center w-full gap-4 mb-8">
           <div className="flex overflow-x-auto gap-3 py-2 scrollbar-hide w-full md:w-auto">
@@ -116,7 +134,7 @@ export default function Home() {
                         <span className="font-bold text-emerald-400 text-sm">{inCartQty} in cart</span>
                         <button
                           onClick={() => addToCart(product)}
-                          disabled={inCartQty >= product.stockQuantity}
+                          disabled={!storeOpen || inCartQty >= product.stockQuantity}
                           className="w-10 h-8 flex items-center justify-center text-slate-300 hover:bg-emerald-500/20 hover:text-emerald-400 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           title="Increase quantity"
                         >
@@ -125,7 +143,7 @@ export default function Home() {
                       </div>
                     ) : (
                       <button
-                        disabled={product.stockQuantity <= 0}
+                        disabled={!storeOpen || product.stockQuantity <= 0}
                         onClick={() => addToCart(product)}
                         className="w-full py-3 px-4 bg-slate-700 hover:bg-emerald-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-slate-700"
                       >

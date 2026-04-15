@@ -6,7 +6,7 @@ import { placeTakeawayOrder } from "@/lib/products";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Trash2, MessageCircle } from "lucide-react";
-import { doc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export default function CheckoutPage() {
@@ -14,7 +14,19 @@ export default function CheckoutPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [name, setName] = useState("");
+  const [storeOpen, setStoreOpen] = useState(true);
   const router = useRouter();
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "status"), (snap) => {
+      if (snap.exists()) {
+        setStoreOpen(snap.data().isOpen !== false);
+      } else {
+        setStoreOpen(true);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,9 +191,14 @@ export default function CheckoutPage() {
                   />
                 </div>
 
+                {!storeOpen && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl mb-4">
+                    <p className="text-red-400 font-bold text-sm">🚨 Store is CLOSED. Orders cannot be placed.</p>
+                  </div>
+                )}
                 <button
                   type="submit"
-                  disabled={isProcessing || !name.trim()}
+                  disabled={!storeOpen || isProcessing || !name.trim()}
                   className="w-full py-4 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex justify-center items-center gap-2 mt-4"
                 >
                   <MessageCircle size={20} />

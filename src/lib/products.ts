@@ -89,6 +89,11 @@ export async function placeTakeawayOrder(
 ): Promise<void> {
   if (isMock) {
     if (typeof window !== "undefined") {
+      const mockStatus = localStorage.getItem("mockStoreStatus");
+      if (mockStatus) {
+        const parsed = JSON.parse(mockStatus);
+        if (parsed.isOpen === false) throw new Error("Store is currently closed.");
+      }
       const storedOrders = localStorage.getItem("mockOrders");
       const mockOrders = storedOrders ? JSON.parse(storedOrders) : [];
       const orderId = `${orderData.name} - ${Date.now()}`;
@@ -98,14 +103,21 @@ export async function placeTakeawayOrder(
     return;
   }
 
-  const orderId = `${orderData.name} - ${Date.now()}`;
-  const orderRef = doc(db, "orders", orderId);
-  await setDoc(orderRef, {
-    name: orderData.name,
-    total: orderData.total,
-    items: orderData.items,
-    createdAt: new Date().toISOString(),
-    status: "pending",
+  await runTransaction(db, async (transaction) => {
+    const statusRef = doc(db, "settings", "status");
+    const statusDoc = await transaction.get(statusRef);
+    if (statusDoc.exists() && statusDoc.data().isOpen === false) {
+      throw new Error("Store is currently closed.");
+    }
+    const orderId = `${orderData.name} - ${Date.now()}`;
+    const orderRef = doc(db, "orders", orderId);
+    transaction.set(orderRef, {
+      name: orderData.name,
+      total: orderData.total,
+      items: orderData.items,
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    });
   });
 }
 

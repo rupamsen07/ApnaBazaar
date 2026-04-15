@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { getProducts, addProduct, updateProduct, deleteProduct, Product, updateOrderStatus, deleteOrder, Order, cancelOrder, fulfillOrder } from "@/lib/products";
 import { Pencil, Trash2, Plus, X, Save, CheckCircle2 } from "lucide-react";
-import {collection,query,where,onSnapshot} from "firebase/firestore";
+import {collection,query,where,onSnapshot,doc,setDoc} from "firebase/firestore";
 import {db} from "@/lib/firebase";
 
 export default function AdminDashboard() {
@@ -16,6 +16,7 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [storeOpen, setStoreOpen] = useState(true);
   
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -28,7 +29,8 @@ export default function AdminDashboard() {
     category: "Others"
   });
 
-  useEffect(()=>{if(!authLoading){if(!user||role!=="admin"){router.push("/");}else{loadData();const q=query(collection(db,"orders"),where("status","==","pending"));const unsubscribe=onSnapshot(q,(snapshot)=>{const activeOrders=snapshot.docs.map(doc=>({id:doc.id,...doc.data()} as Order)).sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime());setOrders(activeOrders);});return ()=>unsubscribe();}}},[user,role,authLoading,router]);
+  useEffect(()=>{if(!authLoading){if(!user||role!=="admin"){router.push("/");}else{loadData();const q=query(collection(db,"orders"),where("status","==","pending"));const unsub1=onSnapshot(q,(snapshot)=>{const activeOrders=snapshot.docs.map(d=>({id:d.id,...d.data()} as Order)).sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime());setOrders(activeOrders);});const unsub2=onSnapshot(doc(db,"settings","status"),(snap)=>{if(snap.exists()){setStoreOpen(snap.data().isOpen!==false);}else{setStoreOpen(true);}});return ()=>{unsub1();unsub2();};}}},[user,role,authLoading,router]);
+  const toggleStore=async()=>{await setDoc(doc(db,"settings","status"),{isOpen:!storeOpen},{merge:true});};
   const loadData=async()=>{setLoading(true);try{const fetchedProducts=await getProducts();setProducts(fetchedProducts);}catch(e){console.error(e);}setLoading(false);};
 
   const handleAdd = async () => {
@@ -113,6 +115,16 @@ export default function AdminDashboard() {
     <>
       <Navbar />
       <main className="container mx-auto p-4 md:p-8">
+        <div className={`flex items-center justify-between p-5 rounded-2xl border mb-8 ${storeOpen ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-3 h-3 rounded-full ${storeOpen ? 'bg-emerald-400 shadow-lg shadow-emerald-500/50' : 'bg-red-400 shadow-lg shadow-red-500/50'}`}></div>
+            <span className={`text-lg font-extrabold ${storeOpen ? 'text-emerald-400' : 'text-red-400'}`}>{storeOpen ? 'Store is OPEN' : 'Store is CLOSED'}</span>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" className="sr-only peer" checked={storeOpen} onChange={toggleStore} />
+            <div className="w-14 h-7 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500"></div>
+          </label>
+        </div>
         <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
           <h1 className="text-3xl font-bold text-white">Inventory Management</h1>
           {!isAdding && (
