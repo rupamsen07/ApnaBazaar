@@ -10,6 +10,7 @@ export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("All");
+  const [showOutOfStock, setShowOutOfStock] = useState(false);
   const { items, addToCart, removeFromCart, updateQuantity } = useCart();
   const categories = ["All", "Chips", "Biscuits", "Drinks", "Cakes", "Noodles", "Others"];
 
@@ -39,16 +40,25 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="flex overflow-x-auto gap-3 py-4 mb-8 scrollbar-hide">
-          {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`whitespace-nowrap px-6 py-2 rounded-full font-bold transition-all ${activeCategory === cat ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700'}`}
-            >
-              {cat}
-            </button>
-          ))}
+        <div className="flex flex-col md:flex-row justify-between items-center w-full gap-4 mb-8">
+          <div className="flex overflow-x-auto gap-3 py-2 scrollbar-hide w-full md:w-auto">
+            {categories.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`whitespace-nowrap px-6 py-2 rounded-full font-bold transition-all ${activeCategory === cat ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700'}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-3 bg-slate-800/50 border border-slate-700/50 px-4 py-2 rounded-2xl shrink-0">
+            <span className="text-sm font-bold text-slate-300">Show Out of Stock</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" className="sr-only peer" checked={showOutOfStock} onChange={() => setShowOutOfStock(!showOutOfStock)} />
+              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
         </div>
 
         {loading ? (
@@ -59,7 +69,7 @@ export default function Home() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {products.filter(p => activeCategory === "All" || (p.category || "Others") === activeCategory).map((product) => {
+            {products.filter(p => (activeCategory === "All" || (p.category || "Others") === activeCategory) && (showOutOfStock || p.stockQuantity > 0)).map((product) => {
               const cartItem = items.find(i => i.id === product.id);
               const inCartQty = cartItem?.cartQuantity ?? 0;
 
