@@ -72,14 +72,14 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleCompleteOrder = async (id?: string) => {
-    if (!id) return;
-    try {
+  const handleCompleteOrder=async(id?:string)=>{
+    if(!id)return;
+    try{
       await fulfillOrder(id);
       loadData();
-    } catch (e) {
+    }catch(e:any){
       console.error(e);
-      alert("Failed to complete order");
+      alert(e.message||"Failed to complete order");
     }
   };
 

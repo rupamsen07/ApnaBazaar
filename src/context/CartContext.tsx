@@ -29,18 +29,43 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const router = useRouter();
 
-  // Hydrate cart from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("cart");
-    if (saved) {
-      try { setItems(JSON.parse(saved)); } catch (e) {}
+  useEffect(()=>{
+    const saved=localStorage.getItem("cart");
+    if(saved){
+      try{setItems(JSON.parse(saved));}catch(e){}
     }
-  }, []);
-
-  // Persist cart to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem("cart", JSON.stringify(items));
-  }, [items]);
+  },[]);
+  useEffect(()=>{
+    localStorage.setItem("cart",JSON.stringify(items));
+  },[items]);
+  useEffect(()=>{
+    let unsub=()=>{};
+    import("../lib/products").then(({subscribeToProducts})=>{
+      unsub=subscribeToProducts(products=>{
+        const stockMap:Record<string,number>={};
+        products.forEach(p=>{stockMap[p.id]=p.stockQuantity;});
+        setItems(prev=>{
+          let changed=false;
+          const newItems=prev.map(item=>{
+            const stock=stockMap[item.id];
+            if(stock===undefined)return item;
+            if(stock===0){changed=true;return null;}
+            if(item.cartQuantity>stock){
+              changed=true;
+              return{...item,cartQuantity:stock,stockQuantity:stock};
+            }
+            if(item.stockQuantity!==stock){
+              changed=true;
+              return{...item,stockQuantity:stock};
+            }
+            return item;
+          }).filter(Boolean) as CartItem[];
+          return changed?newItems:prev;
+        });
+      });
+    });
+    return ()=>unsub();
+  },[]);
 
   const addToCart = (product: Product) => {
     const userId = getOrCreateUserId();
